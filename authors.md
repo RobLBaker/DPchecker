@@ -14,16 +14,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/nationalparkservice/DPchecker/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/doi-nps/DPchecker/blob/main/DESCRIPTION)
 
-Baker R, Wright SE (2025). *DPchecker: Checks Data Packages for
+Baker R, Wright SE (2026). *DPchecker: Checks Data Packages for
 Congruence*. R package version 1.1.0,
-<https://github.com/nationalparkservice/DPchecker>.
+<https://github.com/doi-nps/DPchecker>.
 
     @Manual{,
       title = {DPchecker: Checks Data Packages for Congruence},
       author = {Rob Baker and Sarah E. Wright},
-      year = {2025},
+      year = {2026},
       note = {R package version 1.1.0},
-      url = {https://github.com/nationalparkservice/DPchecker},
+      url = {https://github.com/doi-nps/DPchecker},
     }

@@ -8,12 +8,11 @@ DataStore as a datapackage.
 
 Useful links:
 
-- <https://github.com/nationalparkservice/DPchecker>
+- <https://github.com/doi-nps/DPchecker>
 
-- <https://nationalparkservice.github.io/DPchecker/>
+- <https://doi-nps.github.io/DPchecker/>
 
-- Report bugs at
-  <https://github.com/nationalparkservice/DPchecker/issues>
+- Report bugs at <https://github.com/doi-nps/DPchecker/issues>
 
 ## Author
 

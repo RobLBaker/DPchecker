@@ -2,6 +2,11 @@
 
 ## DPchecker 1.1.1
 
+### 2026-04-22
+
+- Documentation (URLs mostly) and metadata (code.json added) updates in
+  preparationfor migration to DGEC.
+
 ### 2025-07-11
 
 - Fix bug in

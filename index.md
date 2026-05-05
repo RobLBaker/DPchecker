@@ -18,8 +18,12 @@ You can install the development version of DPchecker from
 [GitHub](https://github.com/) with:
 
 ``` r
+
 # install.packages("pak")
-pak::pkg_install("nationalparkservice/DPchecker")
+pak::pkg_install("doi-nps/DPchecker")
+# alternatively:
+# install.packages("remotes")
+remotes::install_github("doi-nps/DPchecker")
 ```
 
 ## Examples:
@@ -27,6 +31,7 @@ pak::pkg_install("nationalparkservice/DPchecker")
 Run all checks at once:
 
 ``` r
+
 library(DPchecker)
 
 # Get the directory where example data is stored (alternately, replace this with the path to your data folder)
@@ -45,6 +50,7 @@ run_congruence_checks()
 Verify that file names and column names in the metadata match the data:
 
 ``` r
+
 library(DPchecker)
 
 dir <- DPchecker_example("BICY_veg")  # Use this to test things out with the included example data

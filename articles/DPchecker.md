@@ -2,14 +2,14 @@
 
 ## Install DP checker
 
-You can install
-[DPchecker](https://nationalparkservice.github.io/DPchecker/) as part of
-the [NPSdataverse](https://nationalparkservice.github.io/NPSdataverse/)
+You can install [DPchecker](https://doi-nps.github.io/DPchecker/) as
+part of the [NPSdataverse](https://doi-nps.github.io/NPSdataverse/)
 using:
 
 ``` r
-install.packages("devtools")
-devtools::install_github("nationalparkservice/NPSdataverse")
+
+install.packages("remotes")
+remotes::install_github("doi-nps/NPSdataverse")
 library(NPSdataverse)
 ```
 
@@ -28,6 +28,7 @@ you can put the data package folder in your Rproject folder and tell R
 where to find it:
 
 ``` r
+
 run_congruence_checks("my_data_package_folder")
 ```
 
@@ -37,6 +38,7 @@ data package folder is a folder called “nps_data” located in the
 Downloads folder (and “username” would be your username):
 
 ``` r
+
 dp <- "C:/Users/username/Downloads/my_data_package_folder"
 run_congruence_checks(dp)
 ```
@@ -51,6 +53,7 @@ the [`run_congruence_checks()`](../reference/run_congruence_checks.md)
 function to just check metadata elements:
 
 ``` r
+
 # In this case "my_data_package_folder" need only contain the metadata file but could include .csvs
 dp <- "C:/Users/username/Downloads/my_data_package_folder"
 run_congruence_checks(dp, check_metadata_only = TRUE)
@@ -67,6 +70,7 @@ be written to the directory of your Rproject by default, but you can
 also specify the directory it should be saved to.
 
 ``` r
+
 # save log file to current working directory:
 run_congruence_checks(dp, output_filename = "congruence_log_YYYY-MM-DD")
 
@@ -83,9 +87,9 @@ ability to ingest machine-readable metadata, and be maximally useful to
 downstream data users. The same set of tests will also be useful for
 data package reviewers.
 
-Passing a test is indicated with a green check mark ($✓$). When a test
-fails, it may fail with an error (a red $\times$) or a warning (a yellow
-exclamation mark, !).
+Passing a test is indicated with a green check mark ($`\checkmark`$).
+When a test fails, it may fail with an error (a red $`\times`$) or a
+warning (a yellow exclamation mark, !).
 
 Errors must be addressed prior to upload. **Please modify your data
 package so that DPchecker does not return any errors.**
@@ -196,7 +200,7 @@ and do not require that the data files be present.
 - Metadata contains a valid license name
   ([`test_license()`](../reference/test_license.md))
 - Metadata contains an Intellectual Rights statement
-  ([`test_int_rights()`](../reference/test_int_rights.md)
+  ([`test_int_rights()`](../reference/test_int_rights.md))
 - All attributes listed in metadata have attribute definitions
   ([`test_attribute_defs()`](../reference/test_attribute_defs.md))
 - All attributes listed in metadata have storage types associated with
@@ -257,4 +261,4 @@ resolve any errors before uploading your data.
 
 - Data files do not contain any email addresses that constitute
   personally identifiable information (PII)
-  ([`test_pii_data_emails()`](../reference/test_pii_data.md)
+  ([`test_pii_data_emails()`](../reference/test_pii_data.md))
