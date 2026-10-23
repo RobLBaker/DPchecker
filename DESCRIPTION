@@ -1,6 +1,6 @@
 Package: DPchecker
 Title: Checks Data Packages for Congruence
-Version: 1.1.0
+Version: 1.2.0
 Authors@R: c(
     person("Rob", "Baker", email = "robert_baker@nps.gov", role = c("cre", "aut"), comment = c(ORCID = "0000-0001-7591-5035")),
     person(c("Sarah", "E."), "Wright", email = "sarah_wright@nps.gov", role = "aut"),
@@ -10,13 +10,13 @@ Description: Allows the user (and reviewer) to check a data package and test whe
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Suggests: 
     here,
     rstudioapi,
     testthat (>= 3.0.0),
-    knitr
+    knitr,
+    mockr
 Config/testthat/edition: 3
 Imports:
     EML,
@@ -32,10 +32,13 @@ Imports:
     httr,
     jsonlite,
     QCkit,
-    EMLeditor,
-    lifecycle
-Remotes: 
-    https://github.com/doi-nps/QCkit,
-    https://github.com/doi-nps/EMLeditor
+    EMLeditor (>= 1.3.0),
+    lifecycle,
+    NPSdatastore (>= 0.0.0.9004)
+Remotes:  
+    doi-nps/QCkit,
+    doi-nps/EMLeditor@1.3.0,
+    doi-nps/NPSdatastore
 URL: https://github.com/doi-nps/DPchecker, https://doi-nps.github.io/DPchecker/
 BugReports: https://github.com/doi-nps/DPchecker/issues
+Config/roxygen2/version: 8.0.0

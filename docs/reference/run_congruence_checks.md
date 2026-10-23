@@ -115,8 +115,14 @@ run_congruence_checks(dir)
 #> ✔ All dataTables listed in metadata have a unique file description.
 #> ! Data file 3 description is greater than 15 words. Consider a more concise
 #> description.
-#> ✖ The CUI dissemination code PUBVER is not a valid code. Use
-#>   `EMLeditor::set_cui()`.
+#> ! The permissions specified in metadata are deprecated. Please update the
+#> permissions using `EMLeditor::set_permissions()`.
+#> ✖ Your metadata lacks permissions or contains deprecated CUI information. Use
+#>   `EMLeditor::set_permissions()` to update your permissions.
+#> ✖ Your metadata lacks permissions or contains deprecated CUI information. Use
+#>   `EMLeditor::set_permissions()` to update your permissions.
+#> ✖ Your metadata lacks permissions or contains deprecated CUI information. Use
+#>   `EMLeditor::set_permissions()` to update your permissions.
 #> ✖ Metadata does not contain a license name. Use `EMLeditor::set_int_rights()`
 #>   to add a license name.
 #> ✔ Metadata contains an Intellectual Rights statement.
@@ -159,6 +165,6 @@ run_congruence_checks(dir)
 #> 
 #> ── Summary ──
 #> 
-#> ✖ 3 errors to address
-#> ! 8 warnings to look into
+#> ✖ 5 errors to address
+#> ! 9 warnings to look into
 ```

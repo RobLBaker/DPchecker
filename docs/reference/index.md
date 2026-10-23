@@ -9,6 +9,7 @@
 - [`load_metadata()`](load_metadata.md) : Load Metadata
 - [`run_congruence_checks()`](run_congruence_checks.md) : Run all
   congruence checks
+- [`test_access()`](test_access.md) : Test for CUI dissemination code
 - [`test_attribute_defs()`](test_attribute_defs.md) : Test metadata for
   attribute definitions
 - [`test_by_for_nps()`](test_by_for_nps.md) : Test for "by or for NPS"
@@ -16,8 +17,9 @@
   unit links
 - [`test_creator()`](test_creator.md) : Test for presence of creator and
   surName
-- [`test_cui_dissemination()`](test_cui_dissemination.md) : Test for CUI
-  dissemination code
+- [`test_cui_email()`](test_cui_email.md) : Tests for presence of a
+  email in permissions/cui designation
+- [`test_cui_label()`](test_cui_label.md) : Test for CUI label
 - [`test_datatable_urls()`](test_datatable_urls.md) : Checks for
   consistency in data file URLs
 - [`test_datatable_urls_doi()`](test_datatable_urls_doi.md) : Tests for
