@@ -55,7 +55,18 @@ run_congruence_checks(
 
 ## Value
 
-Invisibly returns `metadata`.
+Invisibly returns a named integer vector
+`c(errors = <n>, warnings = <n>)` (unchanged from prior versions for any
+existing caller). Additionally carries a `"checks"` attribute: a list
+with one element per check that actually ran, each of the form
+`list(check = <name>, status = "pass"/"warn"/"fail")`, in execution
+order. The attribute is purely additive - it does not affect the
+vector's value, names, class, or indexing, so existing console/script
+use is unaffected. Intended for programmatic consumers (e.g. a Shiny
+GUI) that need a per-check readout rather than parsing console output.
+NOTE: if a gatekeeper check fails, the function aborts (as before) and
+therefore returns nothing - the structured attribute is only available
+on a run that completes without a gatekeeper abort.
 
 ## Examples
 

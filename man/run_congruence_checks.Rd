@@ -27,7 +27,18 @@ run_congruence_checks(
 \item{output_dir}{Location in which to save the output file, if using.}
 }
 \value{
-Invisibly returns \code{metadata}.
+Invisibly returns a named integer vector
+\verb{c(errors = <n>, warnings = <n>)} (unchanged from prior versions for
+any existing caller). Additionally carries a \code{"checks"} attribute: a
+list with one element per check that actually ran, each of the form
+\verb{list(check = <name>, status = "pass"/"warn"/"fail")}, in execution
+order. The attribute is purely additive - it does not affect the
+vector's value, names, class, or indexing, so existing console/script
+use is unaffected. Intended for programmatic consumers (e.g. a Shiny
+GUI) that need a per-check readout rather than parsing console output.
+NOTE: if a gatekeeper check fails, the function aborts (as before) and
+therefore returns nothing - the structured attribute is only available
+on a run that completes without a gatekeeper abort.
 }
 \description{
 Run all congruence checks
