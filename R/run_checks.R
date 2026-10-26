@@ -16,9 +16,16 @@
 #'   vector's value, names, class, or indexing, so existing console/script
 #'   use is unaffected. Intended for programmatic consumers (e.g. a Shiny
 #'   GUI) that need a per-check readout rather than parsing console output.
-#'   NOTE: if a gatekeeper check fails, the function aborts (as before) and
-#'   therefore returns nothing - the structured attribute is only available
-#'   on a run that completes without a gatekeeper abort.
+#'
+#'   If a GATEKEEPER check fails (load_metadata, validate_schema,
+#'   dup_meta_entries, file_name_match, fields_match), the function aborts
+#'   as before - it does NOT return. In that case the same per-check list
+#'   (including the failing gatekeeper, and every check that ran before it)
+#'   is attached to the thrown condition as a `$checks` field, so a
+#'   programmatic caller using tryCatch(error = function(e) ...) can still
+#'   recover the partial readout via `e$checks`. The console output of the
+#'   abort is unchanged (the extra condition field is metadata, not message
+#'   text).
 #' @export
 #'
 #' @examples
@@ -45,7 +52,20 @@ run_congruence_checks <- function(directory = here::here(),
   # record_check() call, and appends one pass/warn/fail record. This adds
   # exactly one line per check and does NOT touch any existing handler or
   # cli output - the console experience is identical. See the function's
-  # @return for the shape and the gatekeeper-abort caveat.
+  # @return for the shape and the gatekeeper-abort behavior.
+  #
+  # GATEKEEPER CHECKS (the ones whose error handler calls cli::cli_abort)
+  # need special handling: cli_abort unwinds the stack, so the post-block
+  # record_check() never runs on a failure, AND the local check_log would
+  # otherwise be lost. So each gatekeeper's error handler, right before
+  # aborting, (a) appends its own "fail" record inline, and (b) passes the
+  # partial check_log to cli_abort() via a `checks =` field, which rides
+  # along on the thrown condition for the caller to recover as e$checks.
+  # On a SUCCESSFUL gatekeeper check the inline append never runs (no
+  # error), so the normal post-block record_check() still logs its pass/
+  # warn - the two are mutually exclusive (abort -> inline only, never
+  # reaches the post-block call; pass/warn -> post-block only), so there
+  # is no double-logging.
   check_log <- list()
   .prev_err <- 0
   .prev_warn <- 0
@@ -94,7 +114,8 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
-             cli::cli_abort(c("x" = "You must correct the above issue before the congruence checks can run."), call = NULL)
+             check_log[[length(check_log) + 1]] <<- list(check = "load_metadata", status = "fail")
+             cli::cli_abort(c("x" = "You must correct the above issue before the congruence checks can run."), call = NULL, checks = check_log)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
@@ -107,7 +128,8 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
-             cli::cli_abort(c("x" = "Metadata schema must validate before the rest of the congruence checks can run."), call = NULL)
+             check_log[[length(check_log) + 1]] <<- list(check = "validate_schema", status = "fail")
+             cli::cli_abort(c("x" = "Metadata schema must validate before the rest of the congruence checks can run."), call = NULL, checks = check_log)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
@@ -119,7 +141,8 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
-             cli::cli_abort(c("x" = "You must remove duplicate data table names from metadata before the rest of the congruence checks can run."), call = NULL)
+             check_log[[length(check_log) + 1]] <<- list(check = "dup_meta_entries", status = "fail")
+             cli::cli_abort(c("x" = "You must remove duplicate data table names from metadata before the rest of the congruence checks can run."), call = NULL, checks = check_log)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
@@ -589,7 +612,8 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
-               cli::cli_abort(c("x" = "Files documented in metadata must match files present in package before the rest of the congruence checks can run."), call = NULL)
+               check_log[[length(check_log) + 1]] <<- list(check = "file_name_match", status = "fail")
+               cli::cli_abort(c("x" = "Files documented in metadata must match files present in package before the rest of the congruence checks can run."), call = NULL, checks = check_log)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
@@ -601,7 +625,8 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
-               cli::cli_abort(c("x" = "Columns documented in metadata must match columns present in data files before the rest of the congruence checks can run."), call = NULL)
+               check_log[[length(check_log) + 1]] <<- list(check = "fields_match", status = "fail")
+               cli::cli_abort(c("x" = "Columns documented in metadata must match columns present in data files before the rest of the congruence checks can run."), call = NULL, checks = check_log)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
