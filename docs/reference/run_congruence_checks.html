@@ -80,7 +80,18 @@
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>Invisibly returns <code>metadata</code>.</p>
+    <p>Invisibly returns a named integer vector
+<code>c(errors = &lt;n&gt;, warnings = &lt;n&gt;)</code> (unchanged from prior versions for
+any existing caller). Additionally carries a <code>"checks"</code> attribute: a
+list with one element per check that actually ran, each of the form
+<code>list(check = &lt;name&gt;, status = "pass"/"warn"/"fail")</code>, in execution
+order. The attribute is purely additive - it does not affect the
+vector's value, names, class, or indexing, so existing console/script
+use is unaffected. Intended for programmatic consumers (e.g. a Shiny
+GUI) that need a per-check readout rather than parsing console output.
+NOTE: if a gatekeeper check fails, the function aborts (as before) and
+therefore returns nothing - the structured attribute is only available
+on a run that completes without a gatekeeper abort.</p>
     </div>
 
     <div class="section level2">
