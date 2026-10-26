@@ -25,7 +25,8 @@
 #'   programmatic caller using tryCatch(error = function(e) ...) can still
 #'   recover the partial readout via `e$checks`. The console output of the
 #'   abort is unchanged (the extra condition field is metadata, not message
-#'   text).
+#'   text; the message is still rendered with cli formatting via
+#'   rlang::abort(..., use_cli_format = TRUE)).
 #' @export
 #'
 #' @examples
@@ -54,13 +55,17 @@ run_congruence_checks <- function(directory = here::here(),
   # cli output - the console experience is identical. See the function's
   # @return for the shape and the gatekeeper-abort behavior.
   #
-  # GATEKEEPER CHECKS (the ones whose error handler calls cli::cli_abort)
-  # need special handling: cli_abort unwinds the stack, so the post-block
-  # record_check() never runs on a failure, AND the local check_log would
-  # otherwise be lost. So each gatekeeper's error handler, right before
-  # aborting, (a) appends its own "fail" record inline, and (b) passes the
-  # partial check_log to cli_abort() via a `checks =` field, which rides
-  # along on the thrown condition for the caller to recover as e$checks.
+  # GATEKEEPER CHECKS (the ones whose error handler aborts) need special
+  # handling: the abort unwinds the stack, so the post-block record_check()
+  # never runs on a failure, AND the local check_log would otherwise be
+  # lost. So each gatekeeper's error handler, right before aborting, (a)
+  # appends its own "fail" record inline, and (b) passes the partial
+  # check_log on the thrown condition via rlang::abort(..., checks =
+  # check_log) so the caller can recover it as e$checks. (Note: cli::
+  # cli_abort() does NOT forward extra fields onto the condition - verified
+  # - so rlang::abort() is used directly, with use_cli_format = TRUE and a
+  # c("x" = ...) message so the console output is byte-identical to the old
+  # cli::cli_abort(c("x" = ...)) call.)
   # On a SUCCESSFUL gatekeeper check the inline append never runs (no
   # error), so the normal post-block record_check() still logs its pass/
   # warn - the two are mutually exclusive (abort -> inline only, never
@@ -115,7 +120,7 @@ run_congruence_checks <- function(directory = here::here(),
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
              check_log[[length(check_log) + 1]] <<- list(check = "load_metadata", status = "fail")
-             cli::cli_abort(c("x" = "You must correct the above issue before the congruence checks can run."), call = NULL, checks = check_log)
+             rlang::abort(c("x" = "You must correct the above issue before the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
@@ -129,7 +134,7 @@ run_congruence_checks <- function(directory = here::here(),
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
              check_log[[length(check_log) + 1]] <<- list(check = "validate_schema", status = "fail")
-             cli::cli_abort(c("x" = "Metadata schema must validate before the rest of the congruence checks can run."), call = NULL, checks = check_log)
+             rlang::abort(c("x" = "Metadata schema must validate before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
@@ -142,7 +147,7 @@ run_congruence_checks <- function(directory = here::here(),
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
              check_log[[length(check_log) + 1]] <<- list(check = "dup_meta_entries", status = "fail")
-             cli::cli_abort(c("x" = "You must remove duplicate data table names from metadata before the rest of the congruence checks can run."), call = NULL, checks = check_log)
+             rlang::abort(c("x" = "You must remove duplicate data table names from metadata before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
@@ -613,7 +618,7 @@ run_congruence_checks <- function(directory = here::here(),
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
                check_log[[length(check_log) + 1]] <<- list(check = "file_name_match", status = "fail")
-               cli::cli_abort(c("x" = "Files documented in metadata must match files present in package before the rest of the congruence checks can run."), call = NULL, checks = check_log)
+               rlang::abort(c("x" = "Files documented in metadata must match files present in package before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
@@ -626,7 +631,7 @@ run_congruence_checks <- function(directory = here::here(),
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
                check_log[[length(check_log) + 1]] <<- list(check = "fields_match", status = "fail")
-               cli::cli_abort(c("x" = "Columns documented in metadata must match columns present in data files before the rest of the congruence checks can run."), call = NULL, checks = check_log)
+               rlang::abort(c("x" = "Columns documented in metadata must match columns present in data files before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
