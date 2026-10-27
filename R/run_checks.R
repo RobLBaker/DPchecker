@@ -11,22 +11,25 @@
 #'   `c(errors = <n>, warnings = <n>)` (unchanged from prior versions for
 #'   any existing caller). Additionally carries a `"checks"` attribute: a
 #'   list with one element per check that actually ran, each of the form
-#'   `list(check = <name>, status = "pass"/"warn"/"fail")`, in execution
-#'   order. The attribute is purely additive - it does not affect the
-#'   vector's value, names, class, or indexing, so existing console/script
-#'   use is unaffected. Intended for programmatic consumers (e.g. a Shiny
-#'   GUI) that need a per-check readout rather than parsing console output.
+#'   `list(check = <name>, status = "pass"/"warn"/"fail", message = <chr>)`,
+#'   in execution order. `message` is the raw condition text the check
+#'   raised (`c(cond$message, cond$body)`) for a warn/fail, or NULL for a
+#'   pass - i.e. the same content printed to the console, minus cli's
+#'   visual formatting. The attribute is purely additive - it does not
+#'   affect the vector's value, names, class, or indexing, so existing
+#'   console/script use is unaffected. Intended for programmatic consumers
+#'   (e.g. a Shiny GUI) that need a per-check readout - including the
+#'   reason for a warn/fail - rather than parsing console output.
 #'
 #'   If a GATEKEEPER check fails (load_metadata, validate_schema,
 #'   dup_meta_entries, file_name_match, fields_match), the function aborts
 #'   as before - it does NOT return. In that case the same per-check list
-#'   (including the failing gatekeeper, and every check that ran before it)
-#'   is attached to the thrown condition as a `$checks` field, so a
-#'   programmatic caller using tryCatch(error = function(e) ...) can still
-#'   recover the partial readout via `e$checks`. The console output of the
-#'   abort is unchanged (the extra condition field is metadata, not message
-#'   text; the message is still rendered with cli formatting via
-#'   rlang::abort(..., use_cli_format = TRUE)).
+#'   (including the failing gatekeeper, with its message, and every check
+#'   that ran before it) is attached to the thrown condition as a `$checks`
+#'   field, recoverable via tryCatch(error = function(e) e$checks). The
+#'   console output of the abort is unchanged (the extra condition field is
+#'   metadata, not message text; the message is still rendered with cli
+#'   formatting via rlang::abort(..., use_cli_format = TRUE)).
 #' @export
 #'
 #' @examples
@@ -50,30 +53,36 @@ run_congruence_checks <- function(directory = here::here(),
   # congruence tab). record_check(name) is called once immediately after
   # each check's tryCatch(...) block; it reads the running err_count/
   # warn_count totals, diffs them against their values at the previous
-  # record_check() call, and appends one pass/warn/fail record. This adds
-  # exactly one line per check and does NOT touch any existing handler or
-  # cli output - the console experience is identical. See the function's
-  # @return for the shape and the gatekeeper-abort behavior.
+  # record_check() call, determines pass/warn/fail, and appends one record.
+  #
+  # The record also carries `message`: the raw condition text the check
+  # raised. record_check() can't see the condition object itself (e/w only
+  # exist inside the handlers), so each handler stashes c(cond$message,
+  # cond$body) into `.last_msg` (the SAME content it already prints via
+  # cli::cli_bullets); record_check() reads it into the record and clears
+  # it for the next check. A passing check leaves .last_msg NULL, so its
+  # record's message is NULL. This is purely additive - the cli output the
+  # console user sees is untouched (the .last_msg assignment is a side
+  # assignment next to the existing cli call).
   #
   # GATEKEEPER CHECKS (the ones whose error handler aborts) need special
   # handling: the abort unwinds the stack, so the post-block record_check()
   # never runs on a failure, AND the local check_log would otherwise be
   # lost. So each gatekeeper's error handler, right before aborting, (a)
-  # appends its own "fail" record inline, and (b) passes the partial
-  # check_log on the thrown condition via rlang::abort(..., checks =
-  # check_log) so the caller can recover it as e$checks. (Note: cli::
-  # cli_abort() does NOT forward extra fields onto the condition - verified
-  # - so rlang::abort() is used directly, with use_cli_format = TRUE and a
-  # c("x" = ...) message so the console output is byte-identical to the old
-  # cli::cli_abort(c("x" = ...)) call.)
+  # appends its own "fail" record INLINE (including the message), and (b)
+  # passes the partial check_log on the thrown condition via rlang::abort(
+  # ..., checks = check_log) so the caller can recover it as e$checks.
+  # (Note: cli::cli_abort() does NOT forward extra fields onto the
+  # condition - verified - so rlang::abort() is used directly, with
+  # use_cli_format = TRUE and a c("x" = ...) message so the console output
+  # is byte-identical to the old cli::cli_abort(c("x" = ...)) call.)
   # On a SUCCESSFUL gatekeeper check the inline append never runs (no
   # error), so the normal post-block record_check() still logs its pass/
-  # warn - the two are mutually exclusive (abort -> inline only, never
-  # reaches the post-block call; pass/warn -> post-block only), so there
-  # is no double-logging.
+  # warn - mutually exclusive, so no double-logging.
   check_log <- list()
   .prev_err <- 0
   .prev_warn <- 0
+  .last_msg <- NULL
   record_check <- function(name) {
     status <- if (err_count > .prev_err) {
       "fail"
@@ -84,7 +93,8 @@ run_congruence_checks <- function(directory = here::here(),
     }
     .prev_err <<- err_count
     .prev_warn <<- warn_count
-    check_log[[length(check_log) + 1]] <<- list(check = name, status = status)
+    check_log[[length(check_log) + 1]] <<- list(check = name, status = status, message = .last_msg)
+    .last_msg <<- NULL
   }
 
   if (!missing(output_filename)) {
@@ -119,12 +129,13 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
-             check_log[[length(check_log) + 1]] <<- list(check = "load_metadata", status = "fail")
+             check_log[[length(check_log) + 1]] <<- list(check = "load_metadata", status = "fail", message = c(e$message, e$body))
              rlang::abort(c("x" = "You must correct the above issue before the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("load_metadata")
@@ -133,12 +144,13 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
-             check_log[[length(check_log) + 1]] <<- list(check = "validate_schema", status = "fail")
+             check_log[[length(check_log) + 1]] <<- list(check = "validate_schema", status = "fail", message = c(e$message, e$body))
              rlang::abort(c("x" = "Metadata schema must validate before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("validate_schema")
@@ -146,12 +158,13 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
-             check_log[[length(check_log) + 1]] <<- list(check = "dup_meta_entries", status = "fail")
+             check_log[[length(check_log) + 1]] <<- list(check = "dup_meta_entries", status = "fail", message = c(e$message, e$body))
              rlang::abort(c("x" = "You must remove duplicate data table names from metadata before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("dup_meta_entries")
@@ -159,10 +172,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("metadata_version")
@@ -170,10 +185,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              cli::cli_bullets(c(e$message, e$body))
              err_count <<- err_count + 1
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("delimiter")
@@ -181,10 +198,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("header_num")
@@ -192,10 +211,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("footer")
@@ -203,10 +224,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("taxonomic_cov")
@@ -214,10 +237,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("geographic_cov")
@@ -225,10 +250,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("content_units")
@@ -236,10 +263,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("doi")
@@ -247,10 +276,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("doi_format")
@@ -258,10 +289,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("datatable_urls")
@@ -269,30 +302,36 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            })
   record_check("datatable_urls_doi")
   tryCatch(test_datatable_url_attributes(metadata),
            error = function(e) {
              err_count <<-err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            })
   record_check("datatable_url_attributes")
   tryCatch(test_publisher(metadata),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("publisher")
@@ -300,10 +339,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("valid_fieldnames")
@@ -311,10 +352,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("valid_filenames")
@@ -322,10 +365,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("pii_meta_emails")
@@ -336,10 +381,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("creator")
@@ -347,10 +394,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("pub_date")
@@ -358,10 +407,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("dp_title")
@@ -369,10 +420,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("keywords")
@@ -380,10 +433,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("by_for_nps")
@@ -391,10 +446,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("publisher_name")
@@ -402,10 +459,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("publisher_state")
@@ -413,10 +472,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("publisher_city")
@@ -424,10 +485,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("dp_abstract")
@@ -435,10 +498,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("methods")
@@ -446,10 +511,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("file_descript")
@@ -457,10 +524,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("access")
@@ -468,10 +537,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("cui_label")
@@ -479,10 +550,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("cui_email")
@@ -490,10 +563,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("cui_designator")
@@ -501,10 +576,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("license")
@@ -512,10 +589,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("int_rights")
@@ -523,10 +602,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("attribute_defs")
@@ -534,10 +615,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("storage_type")
@@ -548,10 +631,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("orcid_exists")
@@ -559,10 +644,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("orcid_format")
@@ -570,10 +657,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("orcid_resolves")
@@ -581,10 +670,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("orcid_match")
@@ -592,10 +683,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("notes")
@@ -603,10 +696,12 @@ run_congruence_checks <- function(directory = here::here(),
            error = function(e) {
              err_count <<- err_count + 1
              cli::cli_bullets(c(e$message, e$body))
+             .last_msg <<- c(e$message, e$body)
            },
            warning = function(w) {
              warn_count <<- warn_count + 1
              cli::cli_bullets(c(w$message, w$body))
+             .last_msg <<- c(w$message, w$body)
            }
   )
   record_check("project")
@@ -617,12 +712,13 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
-               check_log[[length(check_log) + 1]] <<- list(check = "file_name_match", status = "fail")
+               check_log[[length(check_log) + 1]] <<- list(check = "file_name_match", status = "fail", message = c(e$message, e$body))
                rlang::abort(c("x" = "Files documented in metadata must match files present in package before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_bullets(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("file_name_match")
@@ -630,12 +726,13 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
-               check_log[[length(check_log) + 1]] <<- list(check = "fields_match", status = "fail")
+               check_log[[length(check_log) + 1]] <<- list(check = "fields_match", status = "fail", message = c(e$message, e$body))
                rlang::abort(c("x" = "Columns documented in metadata must match columns present in data files before the rest of the congruence checks can run."), checks = check_log, call = NULL, use_cli_format = TRUE)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_bullets(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("fields_match")
@@ -643,10 +740,12 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
+               .last_msg <<- c(e$message, e$body)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_bullets(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("missing_data")
@@ -654,10 +753,12 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
+               .last_msg <<- c(e$message, e$body)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_bullets(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("numeric_fields")
@@ -665,10 +766,12 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
+               .last_msg <<- c(e$message, e$body)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_bullets(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("dates_parse")
@@ -676,10 +779,12 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
+               .last_msg <<- c(e$message, e$body)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_bullets(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("date_range")
@@ -689,10 +794,12 @@ run_congruence_checks <- function(directory = here::here(),
              error = function(e) {
                err_count <<- err_count + 1
                cli::cli_bullets(c(e$message, e$body))
+               .last_msg <<- c(e$message, e$body)
              },
              warning = function(w) {
                warn_count <<- warn_count + 1
                cli::cli_verbatim(c(w$message, w$body))
+               .last_msg <<- c(w$message, w$body)
              }
     )
     record_check("pii_data_emails")
