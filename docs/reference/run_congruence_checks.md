@@ -59,14 +59,25 @@ Invisibly returns a named integer vector
 `c(errors = <n>, warnings = <n>)` (unchanged from prior versions for any
 existing caller). Additionally carries a `"checks"` attribute: a list
 with one element per check that actually ran, each of the form
-`list(check = <name>, status = "pass"/"warn"/"fail")`, in execution
-order. The attribute is purely additive - it does not affect the
+`list(check = <name>, status = "pass"/"warn"/"fail", message = <chr>)`,
+in execution order. `message` is the raw condition text the check raised
+(`c(cond$message, cond$body)`) for a warn/fail, or NULL for a pass -
+i.e. the same content printed to the console, minus cli's visual
+formatting. The attribute is purely additive - it does not affect the
 vector's value, names, class, or indexing, so existing console/script
 use is unaffected. Intended for programmatic consumers (e.g. a Shiny
-GUI) that need a per-check readout rather than parsing console output.
-NOTE: if a gatekeeper check fails, the function aborts (as before) and
-therefore returns nothing - the structured attribute is only available
-on a run that completes without a gatekeeper abort.
+GUI) that need a per-check readout - including the reason for a
+warn/fail - rather than parsing console output.
+
+If a GATEKEEPER check fails (load_metadata, validate_schema,
+dup_meta_entries, file_name_match, fields_match), the function aborts as
+before - it does NOT return. In that case the same per-check list
+(including the failing gatekeeper, with its message, and every check
+that ran before it) is attached to the thrown condition as a `$checks`
+field, recoverable via tryCatch(error = function(e) e\$checks). The
+console output of the abort is unchanged (the extra condition field is
+metadata, not message text; the message is still rendered with cli
+formatting via rlang::abort(..., use_cli_format = TRUE)).
 
 ## Examples
 
